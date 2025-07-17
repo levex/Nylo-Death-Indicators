@@ -6,7 +6,6 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.*;
 import net.runelite.api.gameval.AnimationID;
 import net.runelite.api.gameval.ItemID;
-import net.runelite.api.gameval.NpcID;
 import net.runelite.api.gameval.*;
 import net.runelite.api.kit.KitType;
 import net.runelite.client.callback.ClientThread;
@@ -17,7 +16,6 @@ import net.runelite.client.party.PartyService;
 import net.runelite.client.party.WSClient;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.util.Text;
 import org.apache.commons.lang3.ArrayUtils;
 
 import javax.inject.Inject;
@@ -32,16 +30,15 @@ import java.util.stream.Collectors;
 public class NyloDeathIndicatorsPlugin extends Plugin {
   private int partySize = 0;
   private boolean isInNyloRegion = false;
-  private final ArrayList<Nylocas> nylos = new ArrayList<>();
-  private final ArrayList<Nylocas> deadNylos = new ArrayList<>();
+  private final List<Nylocas> nylos = new ArrayList<>();
+  private final List<Nylocas> deadNylos = new ArrayList<>();
   private final Map<Skill, Integer> fakeXpMap = new EnumMap<>(Skill.class);
   private final Map<Skill, Integer> previousXpMap = new EnumMap<>(Skill.class);
 
   private static final Set<Integer> CHINCHOMPAS = new HashSet<>(Arrays.asList(
       ItemID.CHINCHOMPA_CAPTURED,
       ItemID.CHINCHOMPA_BIG_CAPTURED,
-      ItemID.CHINCHOMPA_BLACK
-  ));
+      ItemID.CHINCHOMPA_BLACK));
 
   private static final Set<Integer> POWERED_STAVES = new HashSet<>(Arrays.asList(
       ItemID.SANGUINESTI_STAFF,
@@ -53,8 +50,7 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
       ItemID.WILD_CAVE_ACCURSED_CHARGED,
       ItemID.WARPED_SCEPTRE,
       ItemID.TUMEKENS_SHADOW,
-      ItemID.DEADMAN_BLIGHTED_TUMEKENS_SHADOW
-  ));
+      ItemID.DEADMAN_BLIGHTED_TUMEKENS_SHADOW));
 
   private static final Set<Integer> NYLO_MELEE_WEAPONS = new HashSet<>(Arrays.asList(
       ItemID.SWIFT_BLADE, ItemID.JOINT_OF_HAM, ItemID.GOBLIN_RPG,
@@ -72,19 +68,15 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
       ItemID.BLADE_OF_SAELDOR_INFINITE_MEILYR, ItemID.BLADE_OF_SAELDOR_INFINITE_AMLODD,
       ItemID.BH_DRAGON_CLAWS_CORRUPTED, ItemID.DEADMAN_BLIGHTED_DRAGON_CLAWS, ItemID.VOIDWAKER,
       ItemID.DUAL_MACUAHUITL, ItemID.ELDER_MAUL,
-      ItemID.SULPHUR_BLADES, ItemID.GLACIAL_TEMOTLI
-  ));
+      ItemID.SULPHUR_BLADES, ItemID.GLACIAL_TEMOTLI));
 
   private static final Set<Integer> MULTIKILL_MELEE_WEAPONS = new HashSet<>(Arrays.asList(
       ItemID.SCYTHE_OF_VITUR_UNCHARGED, ItemID.SCYTHE_OF_VITUR,
       ItemID.SCYTHE_OF_VITUR_UNCHARGED_OR, ItemID.SCYTHE_OF_VITUR_OR,
       ItemID.SCYTHE_OF_VITUR_UNCHARGED_BL, ItemID.SCYTHE_OF_VITUR_BL,
       ItemID.DEADMAN_BLIGHTED_SCYTHE_OF_VITUR, ItemID.DEADMAN_BLIGHTED_SCYTHE_OF_VITUR_UNCHARGED,
-      ItemID.DINHS_BULWARK
-  ));
+      ItemID.DINHS_BULWARK));
 
-  private static final int BARRAGE_ANIMATION = AnimationID.ZAROS_VERTICAL_CASTING_WALKMERGE;
-  private static final int DRAGON_FIRE_SHIELD_ANIMATION = AnimationID.QIP_DRAGON_SLAYER_PLAYER_UNLEASHING_FIRE;
   private static final int NYLOCAS_REGION_ID = 13122;
 
   private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
@@ -114,8 +106,8 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
 
   @Override
   protected void shutDown() {
-    hooks.unregisterRenderableDrawListener(drawListener);
     wsClient.unregisterMessage(NpcDamaged.class);
+    hooks.unregisterRenderableDrawListener(drawListener);
   }
 
   private void initializePreviousXpMap() {
@@ -129,19 +121,23 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
   }
 
   @Subscribe
-  protected void onGameTick(GameTick event) {
-    if (!isInNyloRegion) {
-      isInNyloRegion = isInNylocasRegion();
-      if (isInNyloRegion) {
-        partySize = getParty().size();
-      }
-    } else {
-      isInNyloRegion = isInNylocasRegion();
+  protected void onGameStateChanged(GameStateChanged event) {
+    if (event.getGameState() == GameState.LOGGED_IN) {
+      partySize = getPartySize();
       if (!isInNyloRegion) {
-        this.nylos.clear();
+        isInNyloRegion = isInNylocasRegion();
+      } else {
+        isInNyloRegion = isInNylocasRegion();
+        if (!isInNyloRegion) {
+          nylos.clear();
+          deadNylos.clear();
+        }
       }
     }
+  }
 
+  @Subscribe
+  protected void onGameTick(GameTick event) {
     // Group FakeXP drops and process them every game tick
     for (Map.Entry<Skill, Integer> xp : fakeXpMap.entrySet()) {
       processXpDrop(xp.getKey(), xp.getValue());
@@ -167,82 +163,26 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
       return;
     }
 
-    int smSmallHP = -1;
-    int smBigHP = -1;
-    int bigHP = -1;
-    int smallHP = -1;
-
-    switch (this.partySize) {
-      case 1:
-        bigHP = 16;
-        smallHP = 8;
-        smSmallHP = 2;
-        smBigHP = 3;
-        break;
-      case 2:
-        bigHP = 16;
-        smallHP = 8;
-        smSmallHP = 3;
-        smBigHP = 5;
-        break;
-      case 3:
-        bigHP = 16;
-        smallHP = 8;
-        smSmallHP = 6;
-        smBigHP = 9;
-        break;
-      case 4:
-        bigHP = 19;
-        smallHP = 9;
-        smSmallHP = 8;
-        smBigHP = 12;
-        break;
-      case 5:
-        bigHP = 22;
-        smallHP = 11;
-        smSmallHP = 10;
-        smBigHP = 15;
-        break;
+    if (partySize < 1 || partySize > 5) {
+      return;
     }
+
+    int smallHP = NylocasHealth.getNormalModeSmall(partySize);
+    int bigHP = NylocasHealth.getNormalModeBig(partySize);
+    int smSmallHP = NylocasHealth.getStoryModeSmall(partySize);
+    int smBigHP = NylocasHealth.getStoryModeBig(partySize);
 
     final NPC npc = event.getNpc();
-    final int index = npc.getIndex();
-    switch (npc.getId()) {
-      case NpcID.TOB_NYLOCAS_INCOMING_MELEE:
-      case NpcID.TOB_NYLOCAS_INCOMING_RANGED:
-      case NpcID.TOB_NYLOCAS_INCOMING_MAGIC:
-      case NpcID.TOB_NYLOCAS_INCOMING_MELEE_HARD:
-      case NpcID.TOB_NYLOCAS_INCOMING_RANGED_HARD:
-      case NpcID.TOB_NYLOCAS_INCOMING_MAGIC_HARD:
-        this.nylos.add(new Nylocas(npc, index, smallHP));
-        break;
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_MELEE:
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_RANGED:
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_MAGIC:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_MELEE:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_RANGED:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_MAGIC:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_MELEE_STORY:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_RANGED_STORY:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_MAGIC_STORY:
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_MELEE_HARD:
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_RANGED_HARD:
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_MAGIC_HARD:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_MELEE_HARD:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_RANGED_HARD:
-      case NpcID.TOB_NYLOCAS_BIG_FIGHTING_MAGIC_HARD:
-        this.nylos.add(new Nylocas(npc, index, bigHP));
-        break;
-      case NpcID.TOB_NYLOCAS_INCOMING_MELEE_STORY:
-      case NpcID.TOB_NYLOCAS_INCOMING_RANGED_STORY:
-      case NpcID.TOB_NYLOCAS_INCOMING_MAGIC_STORY:
-        this.nylos.add(new Nylocas(npc, index, smSmallHP));
-        break;
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_MELEE_STORY:
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_RANGED_STORY:
-      case NpcID.TOB_NYLOCAS_BIG_INCOMING_MAGIC_STORY:
-        this.nylos.add(new Nylocas(npc, index, smBigHP));
+    NylocasType nyloType = NylocasType.getNyloType(npc.getId());
+    if (nyloType == null) {
+      return;
     }
+
+    int hp = (nyloType.mode == NylocasType.Mode.STORY)
+        ? (nyloType.size == NylocasType.Size.BIG ? smBigHP : smSmallHP)
+        : (nyloType.size == NylocasType.Size.BIG ? bigHP : smallHP);
+
+    nylos.add(new Nylocas(npc, npc.getIndex(), hp));
   }
 
   @Subscribe
@@ -251,8 +191,8 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
       return;
     }
 
-    this.nylos.removeIf((nylo) -> nylo.getNpcIndex() == event.getNpc().getIndex());
-    this.deadNylos.removeIf((nylo) -> nylo.getNpcIndex() == event.getNpc().getIndex());
+    nylos.removeIf((nylo) -> nylo.getNpcIndex() == event.getNpc().getIndex());
+    deadNylos.removeIf((nylo) -> nylo.getNpcIndex() == event.getNpc().getIndex());
   }
 
   @Subscribe
@@ -266,19 +206,19 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
       final int npcIndex = ((NPC) actor).getIndex();
       final int damage = event.getHitsplat().getAmount();
 
-      for (Nylocas nylocas : this.nylos) {
-        if (nylocas.getNpcIndex() != npcIndex) {
-          continue;
-        }
-
-        if (event.getHitsplat().getHitsplatType() == HitsplatID.HEAL) {
-          nylocas.setHp(nylocas.getHp() + damage);
-        } else {
-          nylocas.setHp(nylocas.getHp() - damage);
-        }
-
-        nylocas.setQueuedDamage(Math.max(0, nylocas.getQueuedDamage() - damage));
+      Nylocas nylocas = nylos.stream()
+          .filter(n -> n.getNpcIndex() == npcIndex)
+          .findFirst().orElse(null);
+      if (nylocas == null) {
+        return;
       }
+
+      if (event.getHitsplat().getHitsplatType() == HitsplatID.HEAL) {
+        nylocas.setHp(nylocas.getHp() + damage);
+      } else {
+        nylocas.setHp(nylocas.getHp() - damage);
+      }
+      nylocas.setQueuedDamage(Math.max(0, nylocas.getQueuedDamage() - damage));
     }
   }
 
@@ -296,25 +236,24 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
       }
     }
 
-    clientThread.invokeLater(() -> {
-      final int npcIndex = event.getNpcIndex();
-      final int damage = event.getDamage();
+    final int npcIndex = event.getNpcIndex();
+    final int damage = event.getDamage();
 
-      for (Nylocas nylocas : this.nylos) {
-        if (nylocas.getNpcIndex() != npcIndex) {
-          continue;
-        }
+    Nylocas nylocas = nylos.stream()
+        .filter(n -> n.getNpcIndex() == npcIndex)
+        .findFirst().orElse(null);
+    if (nylocas == null) {
+      return;
+    }
 
-        nylocas.setQueuedDamage(nylocas.getQueuedDamage() + damage);
+    nylocas.setQueuedDamage(nylocas.getQueuedDamage() + damage);
 
-        if (nylocas.getHp() - nylocas.getQueuedDamage() <= 0) {
-          if (deadNylos.stream().noneMatch(deadNylo -> deadNylo.getNpcIndex() == npcIndex)) {
-            deadNylos.add(nylocas);
-            nylocas.getNpc().setDead(true);
-          }
-        }
+    if (nylocas.getHp() - nylocas.getQueuedDamage() <= 0) {
+      if (deadNylos.stream().noneMatch(deadNylo -> deadNylo.getNpcIndex() == npcIndex)) {
+        deadNylos.add(nylocas);
+        nylocas.getNpc().setDead(true);
       }
-    });
+    }
   }
 
   @Subscribe
@@ -358,11 +297,13 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
       return;
     }
 
-    int weaponUsed = playerComposition.getEquipmentId(KitType.WEAPON);
-    int attackStyle = client.getVarpValue(VarPlayerID.COM_MODE);
+    final int weaponUsed = playerComposition.getEquipmentId(KitType.WEAPON);
+    final int attackStyle = client.getVarpValue(VarPlayerID.COM_MODE);
 
-    boolean isBarrageCast = player.getAnimation() == BARRAGE_ANIMATION;
-    boolean isDragonFireShield = player.getAnimation() == DRAGON_FIRE_SHIELD_ANIMATION;
+    final int animation = player.getAnimation();
+    boolean isBarrageCast = animation == AnimationID.ZAROS_VERTICAL_CASTING ||
+        animation == AnimationID.ZAROS_VERTICAL_CASTING_WALKMERGE;
+    boolean isDragonFireShield = animation == AnimationID.QIP_DRAGON_SLAYER_PLAYER_UNLEASHING_FIRE;
 
     boolean isChinchompa = CHINCHOMPAS.contains(weaponUsed);
     boolean isPoweredStaff = POWERED_STAVES.contains(weaponUsed);
@@ -378,7 +319,13 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
 
     switch (skill) {
       case MAGIC:
-        if (isBarrageCast && !isDefensiveCast) {
+        if (isDefensiveCast) {
+          // Ignore all magic xp if we're casting defensively
+          // Handle these xp drops in the DEFENCE case below
+          return;
+        }
+
+        if (isBarrageCast) {
           if (xp % 2 == 0) {
             // Ice Barrage casts are always even due to 52 base xp
             damage = (xp - 52) / 2;
@@ -386,9 +333,7 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
             // Blood Barrage casts are always odd due to 51 base xp
             damage = (xp - 51) / 2;
           }
-          handleAreaOfEffectAttack(damage, player.getInteracting(), true);
-          return;
-        } else if (isPoweredStaff && !isDefensiveCast) {
+        } else if (isPoweredStaff) {
           damage = (int) ((double) xp / 2.0D);
         }
 
@@ -402,45 +347,44 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
           damage = (int) ((double) xp / 4.0D);
         } else if (isDragonFireShield) {
           damage = (int) ((double) xp / 4.0D);
-        } else if (isBarrageCast && isDefensiveCast) {
-          handleAreaOfEffectAttack(xp, player.getInteracting(), true);
-          return;
-        } else if (isPoweredStaff && isDefensiveCast) {
+        } else if (isDefensiveCast) {
           damage = xp;
         }
 
         break;
       case RANGED:
         if (attackStyle == 3) {
+          // Defensive: Ranged XP = 2x damage dealt
           damage = (int) ((double) xp / 2.0D);
         } else {
+          // Accurate/Rapid: Ranged XP = 4x damage dealt
           damage = (int) ((double) xp / 4.0D);
         }
-
-        if (isChinchompa) {
-          handleAreaOfEffectAttack(damage, player.getInteracting(), false);
-          return;
-        }
+        break;
+      default:
+        return;
     }
 
-    sendDamage(player, damage);
+    if (damage > 0) {
+      if (isBarrageCast) {
+        handleAreaOfEffectAttack(damage, player, NylocasType::isMageNylocas);
+      } else if (isChinchompa) {
+        handleAreaOfEffectAttack(damage, player, NylocasType::isRangeNylocas);
+      } else {
+        sendDamage(player, damage);
+      }
+    }
   }
 
-  private void handleAreaOfEffectAttack(final long hit, Actor interacted, boolean isBarrage) {
-    Predicate<Integer> type;
-    if (isBarrage) {
-      type = NylocasType::isMageNylocas;
-    } else {
-      type = NylocasType::isRangeNylocas;
-    }
-
+  private void handleAreaOfEffectAttack(final long hit, Player player, Predicate<Integer> type) {
+    Actor interacted = player.getInteracting();
     if (interacted instanceof NPC) {
       NPC interactedNPC = (NPC) interacted;
       WorldPoint targetPoint = interactedNPC.getWorldLocation();
 
       // Filter all nylos within the radius and then
       // Filter all nylos that can be damaged within the radius
-      List<Nylocas> clump = this.nylos.stream()
+      List<Nylocas> clump = nylos.stream()
           .filter(nylo -> nylo.getNpc().getWorldLocation().distanceTo(targetPoint) <= 1)
           .filter(nylo -> type.test(nylo.getNpc().getId()))
           .collect(Collectors.toList());
@@ -488,17 +432,19 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
     }
   }
 
-  public List<String> getParty() {
-    List<String> team = new ArrayList<>();
+  public int getPartySize() {
+    Set<Integer> varbits = Set.of(
+        VarbitID.TOB_CLIENT_P0,
+        VarbitID.TOB_CLIENT_P1,
+        VarbitID.TOB_CLIENT_P2,
+        VarbitID.TOB_CLIENT_P3,
+        VarbitID.TOB_CLIENT_P4);
 
-    for (int i = 330; i < 335; i++) {
-      team.add(client.getVarcStrValue(i));
-    }
-
-    return team.stream()
-        .map(Text::sanitize)
-        .filter(name -> !name.isEmpty())
-        .collect(Collectors.toList());
+    return (int) varbits
+        .stream()
+        .mapToInt(var -> client.getVarbitValue(var))
+        .filter(val -> val != 0)
+        .count();
   }
 
   private boolean isInNylocasRegion() {
@@ -523,10 +469,10 @@ public class NyloDeathIndicatorsPlugin extends Plugin {
     } else if (renderable instanceof GraphicsObject) {
       switch (((GraphicsObject) renderable).getId()) {
         case SpotanimID.TOB_NYLOCAS_DEATH_MELEE_STANDARD:
-        case SpotanimID.TOB_NYLOCAS_DEATH_RANGED_STANDARD:
-        case SpotanimID.TOB_NYLOCAS_DEATH_MAGIC_STANDARD:
         case SpotanimID.TOB_NYLOCAS_DEATH_MELEE_DETONATE:
+        case SpotanimID.TOB_NYLOCAS_DEATH_RANGED_STANDARD:
         case SpotanimID.TOB_NYLOCAS_DEATH_RANGED_DETONATE:
+        case SpotanimID.TOB_NYLOCAS_DEATH_MAGIC_STANDARD:
         case SpotanimID.TOB_NYLOCAS_DEATH_MAGIC_DETONATE:
           return false;
       }
