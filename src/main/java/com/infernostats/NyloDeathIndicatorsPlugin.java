@@ -9,7 +9,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 import net.runelite.api.Actor;
@@ -27,7 +26,6 @@ import net.runelite.api.Renderable;
 import net.runelite.api.Skill;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.Varbits;
-import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.FakeXpDrop;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
@@ -329,6 +327,15 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 				}
 
 				nylocas.setQueuedDamage(Math.max(0, nylocas.getQueuedDamage() - damage));
+
+				if (nylocas.getHp() <= 0)
+				{
+					if (deadNylos.stream().noneMatch(deadNylo -> deadNylo.getNpcIndex() == npcIndex))
+					{
+						deadNylos.add(nylocas);
+						nylocas.getNpc().setDead(true);
+					}
+				}
 			}
 		}
 	}
@@ -451,17 +458,8 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 			case MAGIC:
 				if (isBarrageCast && !isDefensiveCast)
 				{
-					if (xp % 2 == 0)
-					{
-						// Ice Barrage casts are always even due to 52 base xp
-						damage = (xp - 52) / 2;
-					}
-					else
-					{
-						// Blood Barrage casts are always odd due to 51 base xp
-						damage = (xp - 51) / 2;
-					}
-					handleAreaOfEffectAttack(damage, player.getInteracting(), true);
+					// AOE damage per target cannot be determined from XP alone;
+					// individual deaths are detected via hitsplats in onHitsplatApplied
 					return;
 				}
 				else if (isPoweredStaff && !isDefensiveCast)
@@ -487,7 +485,6 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 				}
 				else if (isBarrageCast && isDefensiveCast)
 				{
-					handleAreaOfEffectAttack(xp, player.getInteracting(), true);
 					return;
 				}
 				else if (isPoweredStaff && isDefensiveCast)
@@ -508,48 +505,11 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 
 				if (isChinchompa)
 				{
-					handleAreaOfEffectAttack(damage, player.getInteracting(), false);
 					return;
 				}
 		}
 
 		sendDamage(player, damage);
-	}
-
-	private void handleAreaOfEffectAttack(final long hit, Actor interacted, boolean isBarrage)
-	{
-		Predicate<Integer> type;
-		if (isBarrage)
-		{
-			type = NylocasType::isMageNylocas;
-		}
-		else
-		{
-			type = NylocasType::isRangeNylocas;
-		}
-
-		if (interacted instanceof NPC)
-		{
-			NPC interactedNPC = (NPC) interacted;
-			WorldPoint targetPoint = interactedNPC.getWorldLocation();
-
-			// Filter all nylos within the radius and then
-			// Filter all nylos that can be damaged within the radius
-			List<Nylocas> clump = this.nylos.stream()
-				.filter(nylo -> nylo.getNpc().getWorldLocation().distanceTo(targetPoint) <= 1)
-				.filter(nylo -> type.test(nylo.getNpc().getId()))
-				.collect(Collectors.toList());
-
-			final int clumpHp = clump.stream()
-				.mapToInt(Nylocas::getHp)
-				.sum();
-			if (clumpHp > hit)
-			{
-				return;
-			}
-
-			sendClumpDamage(clump);
-		}
 	}
 
 	private void sendDamage(Player player, int damage)
@@ -565,22 +525,6 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 			NPC interactedNPC = (NPC) interacted;
 			final int npcIndex = interactedNPC.getIndex();
 			final NpcDamaged npcDamaged = new NpcDamaged(npcIndex, damage);
-
-			if (party.isInParty())
-			{
-				clientThread.invokeLater(() -> party.send(npcDamaged));
-			}
-
-			onNpcDamaged(npcDamaged);
-		}
-	}
-
-	private void sendClumpDamage(List<Nylocas> clump)
-	{
-		for (Nylocas nylocas : clump)
-		{
-			final int npcIndex = nylocas.getNpcIndex();
-			final NpcDamaged npcDamaged = new NpcDamaged(npcIndex, nylocas.getHp());
 
 			if (party.isInParty())
 			{
