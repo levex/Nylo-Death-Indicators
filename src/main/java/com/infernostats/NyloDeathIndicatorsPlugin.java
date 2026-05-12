@@ -325,7 +325,7 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 				}
 				else
 				{
-					nylocas.setHp(nylocas.getHp() - damage);
+					nylocas.setHp(Math.max(0, nylocas.getHp() - damage));
 				}
 
 				nylocas.setQueuedDamage(Math.max(0, nylocas.getQueuedDamage() - damage));
