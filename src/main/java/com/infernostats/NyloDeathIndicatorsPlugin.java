@@ -252,9 +252,15 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 			case NpcID.NYLOCAS_ISCHYROS_8342:
 			case NpcID.NYLOCAS_TOXOBOLOS_8343:
 			case NpcID.NYLOCAS_HAGIOS:
+			case NpcID.NYLOCAS_ISCHYROS_8348:
+			case NpcID.NYLOCAS_TOXOBOLOS_8349:
+			case NpcID.NYLOCAS_HAGIOS_8350:
 			case NpcID.NYLOCAS_ISCHYROS_10791:
 			case NpcID.NYLOCAS_TOXOBOLOS_10792:
 			case NpcID.NYLOCAS_HAGIOS_10793:
+			case NpcID.NYLOCAS_ISCHYROS_10797:
+			case NpcID.NYLOCAS_TOXOBOLOS_10798:
+			case NpcID.NYLOCAS_HAGIOS_10799:
 				this.nylos.add(new Nylocas(npc, index, smallHP));
 				break;
 			case NpcID.NYLOCAS_ISCHYROS_8345:
@@ -263,9 +269,6 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 			case NpcID.NYLOCAS_ISCHYROS_8351:
 			case NpcID.NYLOCAS_TOXOBOLOS_8352:
 			case NpcID.NYLOCAS_HAGIOS_8353:
-			case NpcID.NYLOCAS_ISCHYROS_10783:
-			case NpcID.NYLOCAS_TOXOBOLOS_10784:
-			case NpcID.NYLOCAS_HAGIOS_10785:
 			case NpcID.NYLOCAS_ISCHYROS_10794:
 			case NpcID.NYLOCAS_TOXOBOLOS_10795:
 			case NpcID.NYLOCAS_HAGIOS_10796:
@@ -277,11 +280,17 @@ public class NyloDeathIndicatorsPlugin extends Plugin
 			case NpcID.NYLOCAS_ISCHYROS_10774:
 			case NpcID.NYLOCAS_TOXOBOLOS_10775:
 			case NpcID.NYLOCAS_HAGIOS_10776:
+			case NpcID.NYLOCAS_ISCHYROS_10780:
+			case NpcID.NYLOCAS_TOXOBOLOS_10781:
+			case NpcID.NYLOCAS_HAGIOS_10782:
 				this.nylos.add(new Nylocas(npc, index, smSmallHP));
 				break;
 			case NpcID.NYLOCAS_ISCHYROS_10777:
 			case NpcID.NYLOCAS_TOXOBOLOS_10778:
 			case NpcID.NYLOCAS_HAGIOS_10779:
+			case NpcID.NYLOCAS_ISCHYROS_10783:
+			case NpcID.NYLOCAS_TOXOBOLOS_10784:
+			case NpcID.NYLOCAS_HAGIOS_10785:
 				this.nylos.add(new Nylocas(npc, index, smBigHP));
 		}
 	}
